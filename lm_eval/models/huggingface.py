@@ -35,6 +35,7 @@ from lm_eval.models.utils import (
     pad_and_concat,
     stop_sequences_criteria,
 )
+from lm_eval.dist_utils import gather_tensor
 
 
 eval_logger = utils.eval_logger
@@ -367,7 +368,7 @@ class HFLM(TemplateLM):
     @property
     def model(self):
         # returns the model, unwrapping it if using Accelerate
-        if hasattr(self, "accelerator"):
+        if hasattr(self, "accelerator") and self.accelerator is not None:
             return self.accelerator.unwrap_model(self._model)
         else:
             return self._model
@@ -532,7 +533,7 @@ class HFLM(TemplateLM):
             # this is needed because it seems that the default behavior
             # for quantized models now seems to be device_map="auto"
             # which breaks data-parallel mode.
-            if hasattr(self, "accelerator"):
+            if hasattr(self, "accelerator") and self.accelerator is not None:
                 model_kwargs.update(
                     {"device_map": {"": f"cuda:{self.accelerator.local_process_index}"}}
                 )
@@ -710,9 +711,13 @@ class HFLM(TemplateLM):
         if self.world_size > 1:
             # if multi-GPU, always take minimum over all selected batch sizes
             max_rnk_bs = torch.tensor([batch_size], device=self.device)
-            gathered = (
-                self.accelerator.gather(max_rnk_bs).cpu().detach().numpy().tolist()
-            )
+            if self.accelerator is None:
+                gathered = gather_tensor(max_rnk_bs)
+                gathered = [int(x) for x in gathered]  # convert to list
+            else:
+                gathered = (
+                    self.accelerator.gather(max_rnk_bs).cpu().detach().numpy().tolist()
+                )
             batch_size = min(gathered)
             clear_torch_cache()
             return batch_size
@@ -888,9 +893,13 @@ class HFLM(TemplateLM):
             if self.world_size > 1:
                 # We pad out the external document-level iterator so the inner iterator doesn't hang
                 mytensor = torch.tensor(len(rolling_token_windows), device=self.device)
-                gathered = (
-                    self.accelerator.gather(mytensor).cpu().detach().numpy().tolist()
-                )
+                if self.accelerator is None:
+                    gathered = gather_tensor(mytensor)
+                    gathered = [int(x) for x in gathered]  # convert to list
+                else:
+                    gathered = (
+                        self.accelerator.gather(mytensor).cpu().detach().numpy().tolist()
+                    )
 
                 pad_amnt = max(gathered) - gathered[self.rank]
                 if pad_amnt > 0:

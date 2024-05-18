@@ -439,10 +439,11 @@ def evaluate(
             requests[reqtype].append(instance)
 
         if lm.world_size > 1:
+            instances_rnk = torch.tensor(len(task._instances), device=lm.device)
             if lm.accelerator is None:
-                gathered_item = gather_tensor(len(task._instances))
+                gathered_item = gather_tensor(instances_rnk)
+                gathered_item = [int(x) for x in gathered_item]  # convert to list
             else:
-                instances_rnk = torch.tensor(len(task._instances), device=lm.device)
                 gathered_item = (
                     lm.accelerator.gather(instances_rnk).cpu().detach().numpy().tolist()
                 )

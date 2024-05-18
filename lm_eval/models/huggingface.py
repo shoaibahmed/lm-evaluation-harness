@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import List, Literal, Optional, Tuple, Union
 
 import torch
+import torch.distributed
 import torch.nn.functional as F
 import transformers
 from accelerate import (
@@ -346,6 +347,10 @@ class HFLM(TemplateLM):
             )
             self._rank = 0
             self._world_size = 1
+            if torch.distributed.is_initialized():
+                self._rank = torch.distributed.get_rank()
+                self._world_size = torch.distributed.get_world_size()
+                print(f"[Distributed] Found existing distributed environment. Initializing rank = {self._rank} / world size = {self._world_size}")
 
         self.custom_prefix_token_id = prefix_token_id
         if prefix_token_id is not None:

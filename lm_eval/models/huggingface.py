@@ -347,6 +347,7 @@ class HFLM(TemplateLM):
             )
             self._rank = 0
             self._world_size = 1
+            self.accelerator = None
             if torch.distributed.is_initialized():
                 self._rank = torch.distributed.get_rank()
                 self._world_size = torch.distributed.get_world_size()
